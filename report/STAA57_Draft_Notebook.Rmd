@@ -1,0 +1,574 @@
+---
+title: "STAA57 Project"
+author: "Faiza Khan - 1010864398"
+date: "2026-03-13"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+
+# Description of the Data
+
+### Wages by education level:
+
+YEAR: type int, ranging from 2006 to 2024\
+GEOGRAPHY: type char, categories include "Canada" or "Ontario"\
+IMMIGRANT: type char, categories include total landed immigrants (very recent immigrants, recent immigrants, established immigrants), non-landed immigrants and born in Canada.\
+TYPE.OF.WORK: type char, categories include full-time and part-time.\
+WAGE.RATE: type char, categories include Median hourly wage, Wages include average weekly wage rate.\
+EDUCATION: type char, categories include 0-8 yrs., some high school, high school graduate, some post-secondary, post-secondary certificate diploma and university degree.\
+AGE.GROUP: type char, categories include 15+, 25+, 25-34, 25-54 and 25-64.\
+Both.Sexes: type num, Median wage rate of both sexes\
+Men: type num, Median wage rate of men\
+Women: type num, Median wage rate of Women\
+
+### Labour force estimates by education:
+
+Timeseries: type char, format is "monthyear", (i.e "jan2020") \
+Prov: type char, geographic location, categories include Canadian provinces or canada as a whole\
+Age: type char, The age groups available in the dataset are: Total, 15 - 29, 15 - 24, 25 - 54 ,25 +, 25 - 64, 25 - 34, 55 +, 55 - 64\
+Education: type char, level of education\
+CHAR: type char, Categories include, Population, Labour force, Employed, Full-time, Part-time, Unemployed, Not in labour force, Unemployment rate, Participation rate, Employment rate\
+total: type num, total number of people in the given category (Both men and women)\
+Men: type num, total number of men in the given category \
+Women: type num, total number of women in the given category\
+
+### National Occupation Classification (NOC) skill level:
+
+Timeseries: Year\
+Prov: type char, geographic location, categories include province or canada as a whole\
+OCCUPATION: Includes occupational skill levels\
+Labour.force: total number of men and women in the labour force\
+Employed: number of employed\
+Unemployed: number of unemployed\
+Unemployment.rate: rate of unemployment\
+
+# Background of Data
+
+The data used in this report was collected and published by the Government of Ontario through the open data portal. It includes datasets related to wages by education level, labour force estimates by education, and NOC skill level.
+For this project, the data is focused on finding the relationship between post-secondary education level and career outcomes.
+The goal is to identify patterns and relationships between education and career success, compare outcomes across different education levels, and evaluate how strongly education level is associated with job opportunities in both Canada and Ontario.\ This data is publicly available through Ontario’s open data catalogue and is licensed under the Open Government Licence Ontario.
+
+# Research Question
+
+How does post-secondary education level affect career outcomes and measures of career success in Ontario?\
+
+We explore this through a few key questions:
+
+1. How does education level affect average wages in Ontario?
+2. How does education level influence employment and unemployment rates?
+
+To keep our analysis consistent & based on available data, we will be observing data from years 2016 to 2019. 
+
+# Figures
+
+```{r}
+# libraries 
+library(tidyverse)
+library(ggplot2)
+library(lubridate)
+library(dplyr)
+library(tidyr)
+```
+
+
+```{r}
+#importing datasets
+WBE = read.csv("~/STAA57-Project/datasets/Wages by education level.csv")
+NOC = read.csv("~/STAA57-Project/datasets/National Occupation Classification (NOC) skill level.csv") 
+LFE = read.csv("~/STAA57-Project/datasets/Labour force estimates by education-2015-2019.csv")
+```
+
+
+```{r}
+# reshaping & data preprocessing
+
+## dataset 1: WBE
+
+wbe = WBE %>%
+  filter(2015 < YEAR)
+
+# renaming cols
+
+wbe = wbe %>%
+  select(-WAGE.RATE) %>%
+  rename(
+    STATUS = IMMIGRANT,
+    OCCUPATION = TYPE.OF.WORK,
+    AGE_RANGE = AGE.GROUP,
+    TOTAL_MEDIAN_HOURLY_WAGE = Both.sexes,
+    MEDIAN_HOURLY_WAGE_MEN = Men,
+    MEDIAN_HOURLY_WAGE_WOMEN = Women
+  ) %>%
+  mutate(EDUCATION = trimws(EDUCATION)) %>%
+  mutate(
+    AGE_RANGE = recode(
+      AGE_RANGE,
+      "15 +" = "15+",
+      "25 +" = "25+",
+      "25 - 34" = "25-34",
+      "25 - 54" = "25-54",
+      "25 - 64" = "25-64"
+    )
+  )
+
+wbe$EDUCATION = factor(
+  wbe$EDUCATION,
+  levels = c(
+    "Total, all education levels",
+    "0 - 8 years",
+    "Some high school",
+    "High school graduate",
+    "Some post-secondary",
+    "Post-secondary certificate or diploma",
+    "University degree",
+    "Bachelor's degree",
+    "Above bachelor's degree"
+  )
+)
+
+wbe$AGE_RANGE = factor(
+  wbe$AGE_RANGE,
+  levels = c(
+    "15+",
+    "25-34",
+    "25-54",
+    "25-64",
+    "25+"
+  )
+)
+
+
+## dataset 2: NOC
+noc = NOC %>%
+  filter(
+    Prov == "Canada" | Prov == "Ontario",
+    2015 < Timeseries
+  ) %>%
+  mutate(
+    Employed = as.numeric(Employed),
+    skill_level = case_when(
+      OCCUPATION == "Total, all occupations - All skills level" ~ "All skill levels", 
+      OCCUPATION == "Management" ~ "Management",
+      OCCUPATION == "Professional: occupations usually require university education" ~ "University",
+      OCCUPATION == "NOC skill level B: occupations usually require college education or apprenticeship training" ~ "College",
+      OCCUPATION == "NOC skill level C: occupations usually require secondary school and/or occupation-specific training" ~ "High school and/or occupation-specific training",
+      OCCUPATION == "NOC skill level D: on-the-job training is usually provided for these occupations" ~ "Training Provided",
+      OCCUPATION == "Unclassified" ~ "Unclassified",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  filter(!is.na(skill_level))%>% 
+  select(-OCCUPATION)
+
+# renaming cols
+noc = noc %>%
+  rename(
+    YEAR = Timeseries,
+    GEOGRAPHY = Prov,
+    LABOUR_FORCE = Labour.force,
+    EMPLOYED = Employed,
+    UNEMPLOYED = Unemployed,
+    UNEMPLOYMENT_RATE = Unemployment.rate,
+    EDUCATION = skill_level
+  ) %>%
+  select(
+    YEAR,
+    GEOGRAPHY,
+    EDUCATION,
+    LABOUR_FORCE,
+    EMPLOYED,
+    UNEMPLOYED,
+    UNEMPLOYMENT_RATE,
+    everything()
+  )
+
+noc$EDUCATION = factor(
+  noc$EDUCATION,
+  levels = c(
+    "All skill levels",
+    "Management",
+    "University",
+    "College",
+    "High school and/or occupation-specific training",
+    "Training Provided",
+    "Unclassified"
+  )
+)
+
+## dataset 3: LFE
+
+LFE$Timeseries = as.Date(parse_date_time(trimws(as.character(LFE$Timeseries)), orders = "my"))
+
+lfe = LFE %>%
+  filter(
+    Prov == "Canada" | Prov == "Ontario",
+    2015 < year(Timeseries)
+  )
+
+# with data about men and women separate if needed
+lfe_gender = lfe %>%
+  select(Timeseries, Prov, Age, Education, CHAR, Total, Men, Women) %>%
+  mutate(CHAR = trimws(CHAR)) %>%
+  pivot_wider(
+    names_from = CHAR,
+    values_from = c(Total, Men, Women),
+    values_fn = mean
+  ) %>%
+  rename_with(~ gsub(" ", "_", .x)) %>%
+  rename_with(~ gsub("-", "_", .x)) %>%
+  rename(
+    YEAR = Timeseries,
+    GEOGRAPHY = Prov,
+    AGE_RANGE = Age, 
+    EDUCATION = Education,
+    POPULATION = Total_Population,
+    LABOUR_FORCE = Total_Labour_force,
+    NOT_LABOUR_FORCE = Total_Not_in_labour_force,
+    FULL_TIME = Total_Full_time,
+    PART_TIME = Total_Part_time,
+    UNEMPLOYED = Total_Unemployed,
+    EMPLOYED = Total_Employed,
+    UNEMPLOYMENT_RATE = Total_Unemployment_rate,
+    PARTICIPATION_RATE = Total_Participation_rate,
+    EMPLOYMENT_RATE = Total_Employment_rate
+  ) %>% 
+  mutate(EDUCATION = trimws(EDUCATION)) %>% 
+  mutate(
+    EDUCATION = recode(
+      EDUCATION,
+      "Total, all education attainments" = "All education attainments",
+      "No PSE  (0,1,2,3,4)" = "No Post-Secondary",
+      "0-8 years, (0)" = "0 to 8 years",
+      "Some high school,  (1+2)" = "Some high school",
+      "High school, (3)" = "High school",
+      "Some post-secondary, (4)" = "Some post-secondary",
+      "Post-secondary education (5 to 9)," = "Post-secondary education",
+      "Post-secondary certificate or diploma, (5 + 6 + 7)" = "Post-secondary certificate or diploma",
+      "Trade certificate, (5)" = "Trade certificate",
+      "College diploma, (6)" = "College diploma",
+      "Certificate or diploma below bachelors degree, (7)" = "Certificate or diploma below bachelors degree",
+      "University degree (8+9)" = "University degree",
+      "Bachelor degree (8)" = "Bachelor's degree",
+      "Above Bachelor's degree (9)\"" = "Beyond Bachelor"
+    )
+  ) %>%
+  mutate(AGE_RANGE = trimws(AGE_RANGE)) %>%
+  mutate(
+    AGE_RANGE = recode(
+      AGE_RANGE,
+      "Total" = "All",
+      "15 - 24" = "15-24",
+      "15 - 29" = "15-29",
+      "25 - 34" = "25-34",
+      "25 - 54" = "25-54",
+      "25 - 64" = "25-64",
+      "25 +" = "25+",
+      "55 - 64" = "55-64",
+      "55 +" = "55+"
+    )
+  ) %>%
+  select(
+    YEAR, GEOGRAPHY, AGE_RANGE, EDUCATION,
+    POPULATION, LABOUR_FORCE, NOT_LABOUR_FORCE, EMPLOYED, UNEMPLOYED,
+    FULL_TIME, PART_TIME,
+    UNEMPLOYMENT_RATE, PARTICIPATION_RATE, EMPLOYMENT_RATE,
+    everything()
+  )
+
+
+lfe_gender$EDUCATION = factor(
+  lfe_gender$EDUCATION,
+  levels = c(
+    "All education attainments",
+    "No Post-Secondary",
+    "0 to 8 years",
+    "Some high school",
+    "High school",
+    "Some post-secondary",
+    "Post-secondary education",
+    "Post-secondary certificate or diploma",
+    "Trade certificate",
+    "College diploma",
+    "Certificate or diploma below bachelors degree",
+    "University degree",
+    "Bachelor's degree",
+    "Beyond Bachelor"
+  )
+)
+
+lfe_gender$AGE_RANGE = factor(
+  lfe_gender$AGE_RANGE,
+  levels = c(
+    "All",
+    "15-24",
+    "15-29",
+    "25-34",
+    "25-54",
+    "25-64",
+    "25+",
+    "55-64",
+    "55+"
+  )
+)
+
+#lfe without gender
+
+lfe = lfe_gender %>%
+  select(YEAR, GEOGRAPHY, AGE_RANGE, EDUCATION, 
+         POPULATION, LABOUR_FORCE, NOT_LABOUR_FORCE, 
+         EMPLOYED, UNEMPLOYED, 
+         FULL_TIME, PART_TIME,
+         UNEMPLOYMENT_RATE,
+         PARTICIPATION_RATE,
+         EMPLOYMENT_RATE)
+
+```
+
+```{r}
+# table 1
+
+wage_tbl = wbe %>%
+  filter(AGE_RANGE == "25+") %>%
+  group_by(EDUCATION) %>%
+  summarise(
+    avg_wage = mean(TOTAL_MEDIAN_HOURLY_WAGE, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    avg_wage = round(avg_wage, 2),
+    avg_wage = paste("$", format(avg_wage, nsmall = 2), sep=""),
+  ) %>%
+  rename(
+    Education = EDUCATION,
+    `Average Hourly Wage` = avg_wage
+  )
+
+knitr::kable(
+  wage_tbl,
+  caption = "Median hourly Wage for Adults Aged 25 and Over by Education Level in Ontario (2016-2019)"
+)
+
+```
+
+### Interpretation
+
+Observe that for those who have some or all high school, they earn less by the hour than those who have done some or completed post-secondary. The category earning the least is those with 0 to 8 years of total education, while the most is those who have completed beyond a bachelor's degree. We can infer that the more education that is pursed and completed, the higher the median hourly wage will be.  
+
+```{r}
+# table 2 
+
+unemp_table = noc %>%
+  filter(
+    GEOGRAPHY == "Ontario",
+  ) %>%
+  group_by(EDUCATION) %>%
+  summarise(
+    unemp_rate = mean(UNEMPLOYMENT_RATE, na.rm = TRUE)
+  ) %>%
+  mutate(
+    unemp_rate = round(unemp_rate, 2)
+  ) %>%
+  arrange(EDUCATION) %>%
+  mutate(unemp_rate = paste(round(unemp_rate, 2), "%")) %>%
+  rename(
+    `Skill Level` = EDUCATION,
+    `Unemployment Rate` = unemp_rate
+  )
+
+knitr::kable(
+  unemp_table,
+  caption = "Unemployment Rate by Educational Skill Level (NOC) in Ontario (2016-2019)"
+)
+```
+
+
+### Interpretation
+
+Observe that for the skill levels minimal education or high school, the unemployment rate is higher compared to skill level college or university. We can infer that out of those who have university level skills (i.e. have pursued university) are more get hired. 
+
+
+
+
+```{r}
+# graph 1
+
+age_wage = wbe %>%
+  filter(
+    GEOGRAPHY == " Ontario",
+    YEAR == 2019, 
+    OCCUPATION == " Full-time"
+  ) %>%
+  group_by(EDUCATION, AGE_RANGE) %>%
+  summarise(avg_wage = mean(TOTAL_MEDIAN_HOURLY_WAGE, na.rm = TRUE),
+            .groups = "drop"
+            ) %>%
+  mutate(EDUCATION = trimws(EDUCATION))
+
+ggplot(age_wage, aes(x = EDUCATION, y = avg_wage, fill = AGE_RANGE)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(
+    title = "Median Hourly Wage of Full-Time Employees by Education Level\nand Age Group in Ontario (2016-2019)",
+    x = "Education Level",
+    y = "Median Hourly Wage($)",
+    fill = "Age Range"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+### Interpretation
+
+Note that the age range 15+ encompasses all ages 15 and above, explaning why the bin is higher, as for the ranges 25 to 34, 25 to 54, and 25 to 64, we see that the higher age ranges earn more. Comparing the schooling levels, we see that those with above a bachelors degree earn the most.\
+from the 3 ranges (25-34, 25-54, 25-64):\
+For most education levels, the range 25-64 has the highest median hourly wage. Surprisingly, for the total education level the age range 25-54 has the highest median hourly wage. 
+
+## Test of Hypothesis, Confidence Interval & Bootstrapping
+
+### Test 1
+
+We examine whether women and men at equal completion of educational level have equal employment rates. Specifically, 
+
+H~0~ : There is no difference expected in the proportion of women vs men emploment rate for college diploma,\
+$p$~Women~ = $p$~Men~\
+H~A~ : Men who have a college diploma have a higher employment rate than women who have a college diploma,\
+$p$~Women~ < $p$~Men~\
+
+We will use a 2-sided test.
+
+```{r}
+# prop test employed men vs women for most recent available year
+lfe_college = lfe_gender %>%
+  filter(
+    GEOGRAPHY == "Ontario",
+    EDUCATION == "College diploma", 
+    year(YEAR) == 2019) %>%
+  rename(
+    MEN_EMPLOYED = Men_Employed, 
+    MEN_LABOUR_FORCE = Men_Labour_force,
+    WOMEN_EMPLOYED = Women_Employed,
+    WOMEN_LABOUR_FORCE = Women_Labour_force
+  )
+
+men_emp <- sum(lfe_college$MEN_EMPLOYED, na.rm = TRUE)
+men_total <- sum(lfe_college$MEN_LABOUR_FORCE, na.rm = TRUE)
+
+women_emp <- sum(lfe_college$WOMEN_EMPLOYED, na.rm = TRUE)
+women_total <- sum(lfe_college$WOMEN_LABOUR_FORCE, na.rm = TRUE)
+
+prop.test(
+  x = c(men_emp, women_emp),
+  n = c(men_total, women_total)
+)
+
+diff = (men_emp / men_total) - (women_emp / women_total)
+
+diff
+``` 
+
+### Interpretation
+
+The proportion of employed for men is 0.9606296 while the proportion of employed for men is 0.9588425. There is a difference of 0.001787163 which is extremely small & not significant, for a 95% confidence interval, we obtain a p-value of 0.1384 > 0.5. Thus, we fail to reject H~0~. 
+
+### Test 2
+
+### Confidence Interval & Bootstrapping
+
+We can further our investigation by using bootstrapping. Now observing women and men who have obtained their bachelor's degree, we investigate if women or men earn more. We will use a one-sided test. 
+
+H~0~ : There is no difference expected in the average hourly wages of women vs men who both obtained bachelor's degrees,\
+$mu$~Women~ = $mu$~Men~\
+H~A~ : Men who have obtained a bachelor's degree have higher hourly wage rates than women who have a bachelor's degree,\
+$mu$~Women~ < $mu$~Men~\
+```{r}
+wbeb = wbe %>%
+  filter(
+    GEOGRAPHY == "Canada",
+    AGE_RANGE == "25+",
+    OCCUPATION == " Full-time",
+    EDUCATION == "Bachelor's degree"
+  )
+
+men  = wbeb$MEDIAN_HOURLY_WAGE_MEN
+women = wbeb$MEDIAN_HOURLY_WAGE_WOMEN
+
+boot_function = function() {
+  sample_men = sample(men, size = length(men), replace = TRUE)
+  sample_women = sample(women, size = length(women), replace = TRUE)
+  
+  return(mean(sample_men) - mean(sample_women))
+}
+
+set.seed(100)
+
+boot_diff = replicate(1000, boot_function())
+
+quantile(boot_diff, 0.05)
+
+```
+
+### Interpretation
+Observe for our 95% confidence interval, only 5% of differences are below 3.226389. This means that 95% of the time when repeating the bootstrap method, the difference in wages is over 3.226389. Thus we reject the null hypothesis, H~0~ .
+
+
+## Regression Analysis & Cross-Validation
+```{r}
+lm_model = lm(EMPLOYMENT_RATE ~ EDUCATION, data = lfe)
+
+summary(lm_model)
+```
+
+### Interpretation
+
+The y-intercept is 64.5953, which is roughly 64.60%. We use this as our reference employment rate.
+Each coefficient represents the difference in employment rate between that education level and the reference group.
+Observe that individuals with a University degree have an employment rate approximately 10.22% higher than the reference group. On the other hand, those with 0 to 8 years of education have an employment rate approximately 33.45% lower.
+All coefficients are less than an incredibly small amount, majority are p < 2e-16, others are p < 0.001. 
+We can infer that education level affects employment rate, and there is a positive correlation between higher levels of education and employment rate. 
+
+## Cross Validation
+```{r}
+set.seed(200)
+
+lfe_model = lfe %>%
+  mutate(split = sample(c("train", "test"),
+                        size = n(),
+                        replace = TRUE,
+                        prob = c(0.7, 0.3)))
+
+train = lfe_model %>% filter(split == "train")
+test  = lfe_model %>% filter(split == "test")
+
+lm_model = lm(EMPLOYMENT_RATE ~ EDUCATION + AGE_RANGE + YEAR, data = train)
+
+predictions = predict(lm_model, newdata = test)
+
+mse = mean((test$EMPLOYMENT_RATE - predictions)^2)
+
+mse
+```
+We obtain a mean squared error 25.69199.
+
+
+# Final Summary & Conclusion
+In this report we investigated which factors affected career success defined as higher wage rates, high employment rates, and low unemployment rates. We examinted levels of educations from 0 to 8 years, partially finished high school, high-school completion, some post secondary, completed bachelor's degree, college diploma, as well as university degrees beyond bachelor's.
+Our regression model resulted in a intercept of 64.5953, giving us a baseline for the employment rate. Our mean squared error was 25.69199.\
+Beyond just these factors we explored the differences in wage and employment rate for women and men who have completed the same level of education. We failed to reject our first hypothesis, that women and men that have both obtained their college diploma have equal employment rates. Then we rejected our second hypothesis, that women and men who both obtained their bachelor's degree are paid equal wages by the hour.\ 
+We found that the level of education does signifcally impact what is considered career success, that is, higher wages, and higher employment rates.
+To conclude, we answer our questions:\
+1. How does education level affect average wages in Ontario?\
+Post-secondary education leads to greater wages, additionally for university degrees, a higher level of education implies a  increase in wages.\
+2. How does education level influence employment and unemployment rates?
+Post-secondary education leads to higher employment rates significantly and somewhat lower unemployment rates, additionally for university degrees, a higher level of education implies higher employment rates.
+
+
+# Appendix 
+
+```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
+
+```
